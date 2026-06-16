@@ -22,17 +22,9 @@ public class UserDetailsServiceImpl implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        var user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UsernameNotFoundException(
-                        "User not found: " + email));
+        var user = userRepository.findByEmailIgnoreCase(email)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + email));
 
-        return User
-                .withUsername(user.getEmail())
-                .password(user.getPassword())
-                .authorities(List.of(
-                        new SimpleGrantedAuthority("ROLE_" + user.getRole().name())
-                ))
-                .accountLocked(!user.getIsActive())
-                .build();
+        return new CustomUserDetails(user); // بدل من User.withUsername()
     }
 }
