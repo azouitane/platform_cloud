@@ -4,7 +4,9 @@ import com.virtacore.app.Enums.VmStatus;
 import com.virtacore.app.entity.user.User;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.springframework.data.annotation.CreatedDate;
 
 import java.time.LocalDateTime;
@@ -12,6 +14,8 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "virtual_machines")
+@Getter
+@Setter
 @AllArgsConstructor
 @NoArgsConstructor
 public class VirtualMachine {
@@ -42,6 +46,20 @@ public class VirtualMachine {
 
     @CreatedDate
     private LocalDateTime createdAt;
+
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "cluster_id")
+    private Cluster cluster;
+
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "node_id")
+    private Node proxmoxNode;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "template_id")
+    private Template template;
 
     @ManyToOne(
             fetch = FetchType.LAZY, optional = false

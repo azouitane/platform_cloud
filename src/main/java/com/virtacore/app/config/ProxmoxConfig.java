@@ -15,26 +15,38 @@ import javax.net.ssl.SSLException;
 @Configuration
 public class ProxmoxConfig {
 
+
     @Bean
-    public WebClient proxmoxWebClient() throws SSLException {
+    public WebClient.Builder proxmoxWebClientBuilder()
+            throws SSLException {
 
-        SslContext sslContext = SslContextBuilder
-                .forClient()
-                .trustManager(InsecureTrustManagerFactory.INSTANCE)
-                .build();
 
-        HttpClient httpClient = HttpClient.create()
-                .secure(t -> t.sslContext(sslContext));
+        SslContext sslContext =
+                SslContextBuilder
+                        .forClient()
+                        .trustManager(
+                                InsecureTrustManagerFactory.INSTANCE
+                        )
+                        .build();
+
+
+
+        HttpClient httpClient =
+                HttpClient.create()
+                        .secure(
+                                t -> t.sslContext(
+                                        sslContext
+                                )
+                        );
+
+
 
         return WebClient.builder()
                 .clientConnector(
-                        new ReactorClientHttpConnector(httpClient)
-                )
-                .baseUrl("https://192.168.10.100:8006/api2/json")
-                .defaultHeader(
-                        "Authorization",
-                        "PVEAPIToken=app@pve!spring-boot-token=5680f18a-5973-4427-9688-d06f7c54537e"
-                )
-                .build();
+                        new ReactorClientHttpConnector(
+                                httpClient
+                        )
+                );
     }
+
 }

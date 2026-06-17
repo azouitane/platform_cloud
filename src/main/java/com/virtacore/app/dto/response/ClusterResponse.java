@@ -1,4 +1,16 @@
 package com.virtacore.app.dto.response;
 
-public record ClusterResponse() {
+import java.util.UUID;
+
+public record ClusterResponse(
+        UUID id,
+
+        String name,
+
+        String host,
+
+        Integer apiPort,
+
+        boolean active
+) {
 }

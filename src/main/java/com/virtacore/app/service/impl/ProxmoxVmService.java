@@ -1,14 +1,32 @@
 package com.virtacore.app.service.impl;
 
-import com.virtacore.app.dto.request.CreateVmRequest;
+
+import com.virtacore.app.dto.request.vm.CreateVmRequest;
 import com.virtacore.app.dto.response.ProxmoxResponse;
-import com.virtacore.app.repository.UserRepository;
+import com.virtacore.app.entity.vm.Cluster;
+import com.virtacore.app.entity.vm.Node;
+import com.virtacore.app.entity.vm.Template;
+import com.virtacore.app.exception.ValidationException;
+import com.virtacore.app.proxmox.ProxmoxClientFactory;
+import com.virtacore.app.repository.ClusterRepository;
+import com.virtacore.app.repository.TemplateRepository;
 import com.virtacore.app.repository.VirtualMachineRepository;
+import com.virtacore.app.service.NodeService;
+
+
 import lombok.RequiredArgsConstructor;
+
+
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
+
+
+import java.util.Map;
+import java.util.UUID;
+
 
 
 @Service
@@ -16,110 +34,349 @@ import org.springframework.web.reactive.function.client.WebClient;
 public class ProxmoxVmService {
 
 
-    private final WebClient proxmoxWebClient;
-    private final UserRepository userRepository;
+    private final ClusterRepository clusterRepository;
     private final VirtualMachineRepository virtualMachineRepository;
+    private final TemplateRepository templateRepository;
 
-    private static final String NODE = "pve1";
-    private static final int TEMPLATE_ID = 9000;
+    private final NodeService nodeService;
+
+    private final ProxmoxClientFactory proxmoxClientFactory;
 
 
-    public String createVm(CreateVmRequest request) throws InterruptedException {
+
+    public String createVm(
+            CreateVmRequest request, UUID id
+    ) throws InterruptedException {
 
 
-        // 1 - get next id
+        // ==========================
+        // GET CLUSTER
+        // ==========================
 
-        ProxmoxResponse response =
-                proxmoxWebClient.get()
+
+        Cluster cluster =
+                clusterRepository.findById(
+                                request.clusterId()
+                        )
+                        .orElseThrow(
+                                () -> new ValidationException(
+                                        "Cluster not found"
+                                )
+                        );
+
+        Template template = templateRepository.findByProxmoxTemplateId(request.templateId())
+                .orElseThrow(() -> new ValidationException("Template not found"));
+
+
+        // ==========================
+        // GET NODE
+        // ==========================
+
+
+        Node node = nodeService.findAvailableNodeEntity(cluster.getId());
+
+
+
+        String nodeName =
+                node.getName();
+
+
+
+        WebClient proxmox = proxmoxClientFactory.create(cluster);
+
+
+
+        // ==========================
+        // NEXT VM ID
+        // ==========================
+
+
+        ProxmoxResponse idResponse =
+                proxmox.get()
+
                         .uri("/cluster/nextid")
+
                         .retrieve()
+
                         .bodyToMono(ProxmoxResponse.class)
+
                         .block();
 
 
-        String vmId = response.data().toString();
+
+        String vmId =
+                idResponse.data().toString();
 
 
 
-        // 2 - clone template
+        // ==========================
+        // CLONE TEMPLATE
+        // ==========================
 
-        String task = proxmoxWebClient.post()
-                .uri("/nodes/{node}/qemu/{vmid}/clone",
-                        NODE, request.templateId())
-                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .body(
-                        BodyInserters
-                                .fromFormData("newid", vmId)
-                                .with("name", request.name())
-                                .with("full", "1")
+
+        ProxmoxResponse cloneResponse =
+
+
+                proxmox.post()
+
+
+                        .uri(
+                                "/nodes/{node}/qemu/{vmid}/clone",
+                                nodeName,
+                                request.templateId()
+                        )
+
+
+                        .contentType(
+                                MediaType.APPLICATION_FORM_URLENCODED
+                        )
+
+
+                        .body(
+
+                                BodyInserters
+                                        .fromFormData(
+                                                "newid",
+                                                vmId
+                                        )
+
+                                        .with(
+                                                "name",
+                                                request.name()
+                                        )
+
+                                        .with(
+                                                "full",
+                                                "0"
+                                        )
+                        )
+
+
+                        .retrieve()
+
+                        .bodyToMono(ProxmoxResponse.class)
+
+                        .block();
+
+
+
+        String upid = cloneResponse.data().toString();
+
+
+        waitTask(
+                proxmox,
+                nodeName,
+                upid
+        );
+
+
+        // ==========================
+        // CONFIG VM
+        // ==========================
+
+
+        proxmox.put()
+
+                .uri(
+                        "/nodes/{node}/qemu/{vmid}/config",
+                        nodeName,
+                        vmId
                 )
-                .retrieve()
-                .bodyToMono(String.class)
-                .block();
 
 
+                .contentType(
+                        MediaType.APPLICATION_FORM_URLENCODED
+                )
 
-        // wait clone
-
-        Thread.sleep(15000);
-
-
-
-        // 3 - configure VM
-
-        proxmoxWebClient.put()
-                .uri("/nodes/{node}/qemu/{vmid}/config",
-                        NODE,
-                        vmId)
-
-                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
 
                 .body(
+
                         BodyInserters
-                                .fromFormData("cores",
-                                        String.valueOf(request.cpu()))
+                                .fromFormData(
+                                        "cores",
+                                        request.cpu().toString()
+                                )
 
-                                .with("memory",
-                                        String.valueOf(request.memory()))
+                                .with(
+                                        "memory",
+                                        request.memory().toString()
+                                )
 
-                                .with("ciuser",
-                                        request.username())
+                                .with(
+                                        "ciuser",
+                                        request.username()
+                                )
 
-                                .with("cipassword",
-                                        request.password())
+                                .with(
+                                        "cipassword",
+                                        request.password()
+                                )
 
-                                .with("agent",
-                                        "1")
+                                .with(
+                                        "ipconfig0",
+                                        "ip=dhcp"
+                                )
 
-                                .with("ipconfig0",
-                                        "ip=dhcp")
-
-                                .with("serial0",
-                                        "socket")
+                                .with(
+                                        "agent",
+                                        "1"
+                                )
 
                 )
 
+
                 .retrieve()
+
                 .bodyToMono(String.class)
+
                 .block();
 
 
 
-        // 4 start
+        // ==========================
+        // RESIZE DISK
+        // ==========================
 
 
-        proxmoxWebClient.post()
-                .uri("/nodes/{node}/qemu/{vmid}/status/start",
-                        NODE,
-                        vmId)
+        if(request.disk()!=null){
+
+
+            proxmox.put()
+
+                    .uri(
+                            "/nodes/{node}/qemu/{vmid}/resize",
+                            nodeName,
+                            vmId
+                    )
+
+
+                    .contentType(
+                            MediaType.APPLICATION_FORM_URLENCODED
+                    )
+
+
+                    .body(
+
+                            BodyInserters
+                                    .fromFormData(
+                                            "disk",
+                                            "scsi0"
+                                    )
+
+                                    .with(
+                                            "size",
+                                            "+"+request.disk()+"G"
+                                    )
+                    )
+
+
+                    .retrieve()
+
+                    .bodyToMono(String.class)
+
+                    .block();
+
+        }
+
+
+        // ==========================
+        // START VM
+        // ==========================
+
+
+        proxmox.post()
+
+                .uri(
+                        "/nodes/{node}/qemu/{vmid}/status/start",
+                        nodeName,
+                        vmId
+                )
 
                 .retrieve()
-                .bodyToMono(String.class)
-                .block();
 
+                .bodyToMono(String.class)
+
+                .block();
 
 
         return vmId;
+
+    }
+
+
+
+
+
+
+
+    private void waitTask(
+            WebClient proxmox,
+            String node,
+            String upid
+    ) throws InterruptedException {
+
+
+
+        while(true){
+
+
+            ProxmoxResponse response =
+
+
+                    proxmox.get()
+
+                            .uri(
+                                    "/nodes/{node}/tasks/{upid}/status",
+                                    node,
+                                    upid
+                            )
+
+
+                            .retrieve()
+
+                            .bodyToMono(ProxmoxResponse.class)
+
+                            .block();
+
+
+
+            Map data =
+                    (Map) response.data();
+
+
+
+            String status =
+                    String.valueOf(
+                            data.get("status")
+                    );
+
+
+
+            if(status.equals("stopped")){
+
+
+                if(
+                        "OK".equals(
+                                data.get("exitstatus")
+                        )
+                ){
+                    return;
+                }
+
+
+
+                throw new RuntimeException(
+                        "TASK FAILED : "
+                                + data
+                );
+
+            }
+
+
+
+            Thread.sleep(3000);
+
+        }
 
     }
 

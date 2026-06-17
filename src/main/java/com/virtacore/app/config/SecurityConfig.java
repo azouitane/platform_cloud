@@ -42,7 +42,7 @@ public class SecurityConfig {
 
                         // Endpoints public
                         .requestMatchers(
-                                "/api/auth/**"
+                                "/api/v1/auth/**"
                         ).permitAll()
 
                         .anyRequest().authenticated()

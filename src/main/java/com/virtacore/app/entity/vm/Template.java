@@ -25,4 +25,6 @@ public class Template {
     private String name; // Ubuntu 24.04
 
     private String os;
+
+    private String version;
 }

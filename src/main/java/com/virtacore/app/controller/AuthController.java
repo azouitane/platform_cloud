@@ -5,18 +5,20 @@ import com.virtacore.app.dto.request.Auth.LoginRequest;
 import com.virtacore.app.dto.request.Auth.RefreshRequest;
 import com.virtacore.app.dto.request.Auth.RegisterRequest;
 import com.virtacore.app.dto.request.common.ApiResponse;
+import com.virtacore.app.security.CustomUserDetails;
 import com.virtacore.app.service.impl.AuthServiceImp;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
 public class AuthController {
 
@@ -52,5 +54,15 @@ public class AuthController {
     @PostMapping("/logout")
     public void logout(@RequestBody RefreshRequest req) {
         authService.logout(req.refreshToken());
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<?> getCurrentUser(@AuthenticationPrincipal CustomUserDetails userDetails) {
+        if (userDetails == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+
+        return ResponseEntity.ok(authService.getCurrentUser(userDetails.getId()));
     }
 }

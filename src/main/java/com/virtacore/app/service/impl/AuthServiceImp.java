@@ -5,8 +5,10 @@ import com.virtacore.app.Enums.UserRole;
 import com.virtacore.app.dto.request.Auth.AuthResponse;
 import com.virtacore.app.dto.request.Auth.LoginRequest;
 import com.virtacore.app.dto.request.Auth.RegisterRequest;
+import com.virtacore.app.dto.response.UserResponse;
 import com.virtacore.app.entity.user.RefreshToken;
 import com.virtacore.app.entity.user.User;
+import com.virtacore.app.exception.ResourceNotFoundException;
 import com.virtacore.app.exception.ValidationException;
 import com.virtacore.app.mapper.UserMapper;
 import com.virtacore.app.repository.UserRepository;
@@ -22,6 +24,7 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -56,12 +59,6 @@ public class AuthServiceImp implements AuthService {
     @Override
     public AuthResponse login(LoginRequest request) {
 
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        request.email(),
-                        request.password()
-                )
-        );
 
         String email = request.email().trim().toLowerCase();
 
@@ -109,6 +106,13 @@ public class AuthServiceImp implements AuthService {
         refreshTokenService.revokeAll(token.getId());
     }
 
+
+    public UserResponse getCurrentUser(UUID id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        return userMapper.toResponse(user);
+    }
 
     private AuthResponse buildAuthResponse(User user) {
 
