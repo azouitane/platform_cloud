@@ -1,4 +1,9 @@
 package com.virtacore.app.dto.response;
 
-public record VmIpResponse() {
+import java.util.UUID;
+
+public record VmIpResponse(
+        UUID vmId,
+        String ipAddress
+) {
 }

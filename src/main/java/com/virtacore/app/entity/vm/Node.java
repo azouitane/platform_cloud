@@ -6,6 +6,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -33,6 +35,13 @@ public class Node {
 
 
     private boolean active = true;
+
+    @OneToMany(
+            mappedBy = "node",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true
+    )
+    private List<VirtualMachine> virtualMachines = new ArrayList<>();
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(
