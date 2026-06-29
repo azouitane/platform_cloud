@@ -2,6 +2,7 @@ package com.virtacore.app.service.impl;
 
 import com.virtacore.app.dto.request.vm.ClusterRequest;
 import com.virtacore.app.dto.response.ClusterResponse;
+import com.virtacore.app.dto.response.ClusterSummary;
 import com.virtacore.app.entity.vm.Cluster;
 import com.virtacore.app.exception.ValidationException;
 import com.virtacore.app.mapper.ClusterMapper;
@@ -94,8 +95,16 @@ public class ClusterServiceImpl implements ClusterService {
 
     }
 
+    @Override
+    public List<ClusterSummary> findAllSummary() {
 
+        return clusterRepository
+                .findAll()
+                .stream()
+                .map(clusterMapper::toSummaryResponse)
+                .toList();
 
+    }
 
     @Override
     public ClusterResponse update(

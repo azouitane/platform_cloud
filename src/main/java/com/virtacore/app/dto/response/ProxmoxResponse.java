@@ -1,7 +1,9 @@
 package com.virtacore.app.dto.response;
 
 
-public record ProxmoxResponse(
-        Object data
+import java.util.Map;
+
+public record ProxmoxResponse<T>(
+        T data
 ) {
 }

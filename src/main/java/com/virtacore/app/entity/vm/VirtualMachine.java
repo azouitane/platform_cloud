@@ -63,6 +63,7 @@ public class VirtualMachine {
     @JoinColumn(name = "template_id")
     private Template template;
 
+
     @ManyToOne(
             fetch = FetchType.LAZY, optional = false
     )

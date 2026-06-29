@@ -1,4 +1,9 @@
 package com.virtacore.app.dto.response;
 
-public record LxcTemplateResponse() {
+import java.util.UUID;
+
+public record LxcTemplateResponse(
+        UUID id,
+        String name
+) {
 }

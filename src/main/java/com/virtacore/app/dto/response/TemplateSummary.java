@@ -1,4 +1,8 @@
 package com.virtacore.app.dto.response;
 
-public record TemplateSummary() {
+public record TemplateSummary(
+        Long proxmoxTemplateId,
+
+        String name
+) {
 }

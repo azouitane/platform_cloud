@@ -3,8 +3,7 @@ package com.virtacore.app.service.impl;
 
 import com.virtacore.app.Enums.VmStatus;
 import com.virtacore.app.dto.request.vm.CreateVmRequest;
-import com.virtacore.app.dto.response.ProxmoxResponse;
-import com.virtacore.app.dto.response.VirtualMachineResponse;
+import com.virtacore.app.dto.response.*;
 import com.virtacore.app.entity.user.User;
 import com.virtacore.app.entity.vm.Cluster;
 import com.virtacore.app.entity.vm.Node;
@@ -29,6 +28,7 @@ import org.springframework.stereotype.Service;
 
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 
 import java.util.List;
@@ -53,14 +53,84 @@ public class ProxmoxVmService {
 
 
 
-    public List<VirtualMachineResponse> getAllVms() {
 
-        return virtualMachineRepository.findAll()
-                .stream()
-                .map(virtualMachineMapper::toResponse)
+    public List<VmSummaryResponse> getAllVms() {
+
+        List<VirtualMachine> virtualMachines =
+                virtualMachineRepository.findAll();
+
+        return virtualMachines.stream()
+                .map(vm -> {
+
+                    try {
+
+                        WebClient proxmox =
+                                proxmoxClientFactory.create(vm.getCluster());
+
+                        ProxmoxResponse<Map<String,Object>> response =
+                                proxmox.get()
+                                        .uri(
+                                                "/nodes/{node}/qemu/{vmid}/status/current",
+                                                vm.getNode(),
+                                                vm.getVmId()
+                                        )
+                                        .retrieve()
+                                        .bodyToMono(ProxmoxResponse.class)
+                                        .block();
+
+                        Map<String, Object> data = response.data();
+
+                        String proxmoxStatus =
+                                (String) data.get("status");
+
+                        vm.setStatus(
+                                VmStatus.valueOf(
+                                        proxmoxStatus.toUpperCase()
+                                )
+                        );
+
+                        getVmIpAddress(vm.getId());
+
+                        double cpuPercent = round(
+                                (((Number) data.get("cpu")).doubleValue() * 100)
+                                        / ((Number) data.get("cpus")).intValue()
+                        );
+
+                        double memoryPercent = round(
+                                ((Number) data.get("mem")).doubleValue()
+                                        / ((Number) data.get("maxmem")).doubleValue()
+                                        * 100
+                        );
+
+                        return new VmSummaryResponse(
+                                vm.getId(),
+                                vm.getVmId(),
+                                vm.getName(),
+                                vm.getNode(),
+                                vm.getIpAddress(),
+                                vm.getTemplate().getName(),
+                                vm.getStatus(),
+                                cpuPercent,
+                                memoryPercent
+                        );
+
+                    } catch (Exception e) {
+
+                        return new VmSummaryResponse(
+                                vm.getId(),
+                                vm.getVmId(),
+                                vm.getName(),
+                                vm.getNode(),
+                                vm.getIpAddress(),
+                                vm.getTemplate().getName(),
+                                vm.getStatus(),
+                                0.0,
+                                0.0
+                        );
+                    }
+                })
                 .toList();
     }
-
     public VirtualMachineResponse getVmById(UUID id) {
 
         VirtualMachine vm = virtualMachineRepository.findById(id)
@@ -69,10 +139,27 @@ public class ProxmoxVmService {
                 );
 
         return virtualMachineMapper.toResponse(vm);
+
+
     }
 
 
+
     public String createVm(CreateVmRequest request, UUID id) throws InterruptedException {
+
+
+        // ==========================
+        // VALIDATE NAME
+        // ==========================
+        String vmName = request.name();
+
+        vmName = vmName.trim();
+
+        if (!vmName.matches("^[a-zA-Z][a-zA-Z0-9-]{0,62}$")) {
+            throw new ValidationException(
+                    "VM name must be valid DNS name: start with letter, only a-z, 0-9, -, max 63 chars. Got: " + vmName
+            );
+        }
 
         // ==========================
         // GET CLUSTER
@@ -105,41 +192,39 @@ public class ProxmoxVmService {
         // NEXT VM ID
         // ==========================
 
-        ProxmoxResponse idResponse =
-                proxmox.get()
-
-                        .uri("/cluster/nextid")
-
-                        .retrieve()
-
-                        .bodyToMono(ProxmoxResponse.class)
-
-                        .block();
-
-
-
+        ProxmoxResponse<Object> idResponse = proxmox.get()
+                .uri("/cluster/nextid")
+                .retrieve()
+                .bodyToMono(ProxmoxResponse.class)
+                .block();
+        System.out.println("NEXTID RESPONSE = " + idResponse);
         String vmId = idResponse.data().toString();
 
         // ==========================
         // CLONE TEMPLATE
         // ==========================
+        try {
+            ProxmoxResponse cloneResponse = proxmox.post()
 
-        ProxmoxResponse cloneResponse = proxmox.post()
-
-                        .uri("/nodes/{node}/qemu/{vmid}/clone", nodeName, request.templateId())
-                        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                        .body(BodyInserters.fromFormData("newid", vmId)
-                                        .with("name", request.name())
-                                        .with("full", "0"))
-                        .retrieve()
-                        .bodyToMono(ProxmoxResponse.class)
-                        .block();
-
-
-        String upid = cloneResponse.data().toString();
+                    .uri("/nodes/{node}/qemu/{vmid}/clone", nodeName, request.templateId())
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .body(BodyInserters.fromFormData("newid", vmId)
+                            .with("name",vmName)
+                            .with("full", "1"))
+                    .retrieve()
+                    .bodyToMono(ProxmoxResponse.class)
+                    .block();
 
 
-        waitTask(proxmox, nodeName, upid);
+            String upid = cloneResponse.data().toString();
+
+
+            waitTask(proxmox, nodeName, upid);
+        } catch(WebClientResponseException e){
+            System.out.println("PROXMOX ERROR = " + e.getResponseBodyAsString());
+            throw new RuntimeException("Failed to clone VM: " + e.getResponseBodyAsString(), e);
+        }
+
 
         // ==========================
         // CONFIG VM
@@ -152,9 +237,9 @@ public class ProxmoxVmService {
                         .with("memory", request.memory().toString())
                         .with("ciuser", request.username())
                         .with("cipassword", request.password())
-                        .with("sshkeys", request.sshKey())
                         .with("ipconfig0", "ip=dhcp")
                         .with("agent", "1")
+                        .with("ciupgrade", "0")
                 )
 
                 .retrieve()
@@ -207,6 +292,7 @@ public class ProxmoxVmService {
         vm.setTemplate(template);
         vm.setOwner(owner);
         virtualMachineRepository.save(vm);
+
         return vmId;
 
     }
@@ -313,25 +399,17 @@ public class ProxmoxVmService {
     @Transactional
     public void deleteVm(UUID id) {
 
-
         VirtualMachine vm = getVm(id);
 
+        Cluster cluster = vm.getCluster();
 
-        Cluster cluster =
-                vm.getCluster();
-
-
-        WebClient proxmox =
-                proxmoxClientFactory.create(cluster);
-
+        WebClient proxmox = proxmoxClientFactory.create(cluster);
 
         String node =
                 vm.getNode();
 
         Long vmId =
                 vm.getVmId();
-
-
 
         // ==========================
         // STOP VM FIRST
@@ -357,29 +435,34 @@ public class ProxmoxVmService {
             // VM already stopped
         }
 
-
-
         // ==========================
         // DELETE FROM PROXMOX
         // ==========================
 
-        proxmox.delete()
-                .uri(
-                        "/nodes/{node}/qemu/{vmid}",
-                        node,
-                        vmId
-                )
-                .retrieve()
-                .bodyToMono(String.class)
-                .block();
+        try {
+            proxmox.delete()
+                    .uri(
+                            "/nodes/{node}/qemu/{vmid}",
+                            node,
+                            vmId
+                    )
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
 
+            // ==========================
+            // DELETE DATABASE
+            // ==========================
 
+            virtualMachineRepository.delete(vm);
 
-        // ==========================
-        // DELETE DATABASE
-        // ==========================
+        }catch (Exception e){
 
-        virtualMachineRepository.delete(vm);
+            // ==========================
+            // DELETE DATABASE
+            // ==========================
+            virtualMachineRepository.delete(vm);
+        }
 
     }
 
@@ -461,6 +544,117 @@ public class ProxmoxVmService {
         return null;
     }
 
+
+
+
+    public VmStatusResponse getVmMonitor(UUID id) {
+
+        VirtualMachine vm = getVm(id);
+
+        WebClient proxmox =
+                proxmoxClientFactory.create(vm.getCluster());
+
+
+        ProxmoxResponse<Map<String,Object>> response =
+                proxmox.get()
+                        .uri(
+                                "/nodes/{node}/qemu/{vmid}/status/current",
+                                vm.getNode(),
+                                vm.getVmId()
+                        )
+                        .retrieve()
+                        .bodyToMono(ProxmoxResponse.class)
+                        .block();
+
+
+        Map<String,Object> data = response.data();
+
+        String proxmoxStatus = (String) data.get("status");
+
+        try {
+
+            vm.setStatus(
+                    VmStatus.valueOf(
+                            proxmoxStatus.toUpperCase()
+                    )
+            );
+
+        } catch (IllegalArgumentException e) {
+
+            vm.setStatus(VmStatus.ERROR);
+        }
+
+        virtualMachineRepository.save(vm);
+
+        double cpu =
+                doubleValue(data, "cpu");
+
+
+        int cpus =
+                intValue(data, "cpus");
+
+
+        long mem =
+                longValue(data, "mem");
+
+
+        long maxmem =
+                longValue(data, "maxmem");
+
+
+        return new VmStatusResponse(
+
+                round(
+                        (cpu * 100) / cpus
+                ),
+
+
+                round(
+                        mem / 1024.0 / 1024 / 1024
+                ),
+
+
+                round(
+                        ((double) mem / maxmem) * 100
+                ),
+
+
+                round(
+                        longValue(data,"diskread")
+                                / 1024.0 / 1024
+                ),
+
+
+                round(
+                        longValue(data,"diskwrite")
+                                / 1024.0 / 1024
+                ),
+
+
+                round(
+                        longValue(data,"netin")
+                                / 1024.0 / 1024
+                ),
+
+
+                round(
+                        longValue(data,"netout")
+                                / 1024.0 / 1024
+                ),
+
+
+                longValue(data,"uptime") / 60
+
+        );
+    }
+
+
+    public List<VirtualMachineSummaryResponse> getVmbyStatus(VmStatus status) {
+        return virtualMachineRepository.findByStatus(status)
+                .stream()
+                .map(virtualMachineMapper::toSummaryResponse).toList();
+    }
+
     private void waitTask(WebClient proxmox, String node, String upid) throws InterruptedException {
         while(true){
 
@@ -499,5 +693,50 @@ public class ProxmoxVmService {
     private VirtualMachine getVm(UUID vmId) {
         return virtualMachineRepository.findById(vmId)
                 .orElseThrow(() -> new ValidationException("VM not found"));
+    }
+
+    private String stringValue(
+            Map<String,Object> data,
+            String key
+    ){
+        return (String) data.get(key);
+    }
+
+
+    private int intValue(
+            Map<String,Object> data,
+            String key
+    ){
+        return ((Number)data.get(key)).intValue();
+    }
+
+
+    private long longValue(Map<String, Object> map, String key) {
+
+        Object value = map.get(key);
+
+        if (value == null) {
+            return 0L;
+        }
+
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+
+        return 0L;
+    }
+
+
+    private double doubleValue(
+            Map<String,Object> data,
+            String key
+    ){
+        return ((Number)data.get(key)).doubleValue();
+    }
+
+
+    private double round(double value){
+
+        return Math.round(value * 100.0) / 100.0;
     }
 }

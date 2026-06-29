@@ -1,8 +1,8 @@
 package com.virtacore.app.controller;
 
+import com.virtacore.app.Enums.VmStatus;
 import com.virtacore.app.dto.request.vm.CreateVmRequest;
-import com.virtacore.app.dto.response.VirtualMachineResponse;
-import com.virtacore.app.dto.response.VmIpResponse;
+import com.virtacore.app.dto.response.*;
 import com.virtacore.app.security.CustomUserDetails;
 import com.virtacore.app.service.impl.ProxmoxVmService;
 import jakarta.validation.Valid;
@@ -24,11 +24,32 @@ public class VmController {
 
 
     @GetMapping
-    public ResponseEntity<List<VirtualMachineResponse>> getAllVms() {
+    public ResponseEntity<List<VmSummaryResponse>> getAllVms() {
 
         return ResponseEntity.ok(
                 vmService.getAllVms()
         );
+    }
+
+    @GetMapping("/{id}/monitor")
+    public ResponseEntity<VmStatusResponse> getVmMonitor(
+            @PathVariable UUID id
+    ){
+
+        VmStatusResponse status =
+                vmService.getVmMonitor(id);
+
+
+        return ResponseEntity.ok(status);
+    }
+
+    @GetMapping("/status/{status}")
+    public ResponseEntity<List<VirtualMachineSummaryResponse>> getVmByStatus(
+            @PathVariable VmStatus status
+    ){
+        List<VirtualMachineSummaryResponse> vmbyStatus = vmService.getVmbyStatus(status);
+
+        return ResponseEntity.ok(vmbyStatus);
     }
 
     @GetMapping("/{id}")
@@ -41,8 +62,9 @@ public class VmController {
         );
     }
     @PostMapping
-    public ResponseEntity<?> createVm(@Valid
-            @RequestBody CreateVmRequest request, @AuthenticationPrincipal CustomUserDetails userDetails
+    public ResponseEntity<?> createVm(
+            @Valid @RequestBody CreateVmRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails
     ) throws InterruptedException {
 
         String vmId = vmService.createVm(request,userDetails.getId());
@@ -54,7 +76,6 @@ public class VmController {
                 )
         );
     }
-
     @PostMapping("/{id}/start")
     public ResponseEntity<Void> start(@PathVariable UUID id) {
         vmService.startVm(id);

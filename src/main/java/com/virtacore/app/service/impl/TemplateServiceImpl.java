@@ -2,6 +2,7 @@ package com.virtacore.app.service.impl;
 
 import com.virtacore.app.dto.request.vm.TemplateRequest;
 import com.virtacore.app.dto.response.TemplateResponse;
+import com.virtacore.app.dto.response.TemplateSummary;
 import com.virtacore.app.entity.vm.Template;
 import com.virtacore.app.exception.ResourceNotFoundException;
 import com.virtacore.app.mapper.TemplateMapper;
@@ -12,7 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
+
 
 @Service
 @RequiredArgsConstructor
@@ -44,6 +45,14 @@ public class TemplateServiceImpl implements TemplateService {
                 .stream()
                 .map(templateMapper::toResponse)
                 .toList();
+    }
+
+    @Override
+    public List<TemplateSummary> findAllSummary() {
+        return templateRepository.findAll()
+                .stream().map(
+                        templateMapper::toSummaryResponse
+                ).toList();
     }
 
     @Override

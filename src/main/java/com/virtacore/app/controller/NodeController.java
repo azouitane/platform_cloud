@@ -73,10 +73,6 @@ public class NodeController {
 
 
 
-
-
-
-
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(
             @PathVariable UUID id

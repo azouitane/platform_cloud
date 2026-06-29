@@ -2,6 +2,7 @@ package com.virtacore.app.mapper;
 
 import com.virtacore.app.dto.request.vm.ClusterRequest;
 import com.virtacore.app.dto.response.ClusterResponse;
+import com.virtacore.app.dto.response.ClusterSummary;
 import com.virtacore.app.entity.vm.Cluster;
 import org.mapstruct.Mapper;
 import org.mapstruct.MappingTarget;
@@ -14,6 +15,7 @@ public interface ClusterMapper {
 
     ClusterResponse toResponse(Cluster cluster);
 
+    ClusterSummary toSummaryResponse(Cluster cluster);
 
     void update(
             ClusterRequest request,

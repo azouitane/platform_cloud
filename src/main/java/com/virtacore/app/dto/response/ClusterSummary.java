@@ -1,4 +1,10 @@
 package com.virtacore.app.dto.response;
 
-public record ClusterSummary() {
+import java.util.UUID;
+
+public record ClusterSummary(
+        UUID id,
+
+        String name
+) {
 }

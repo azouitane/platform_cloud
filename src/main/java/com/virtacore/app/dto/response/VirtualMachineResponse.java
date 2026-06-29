@@ -20,15 +20,13 @@ public record VirtualMachineResponse(
 
         Integer disk,
 
-        String ipAddress,
-
         VmStatus status,
 
-        UUID clusterId,
+        String clusterName,
 
-        UUID templateId,
+        String os,
 
-        UUID ownerId,
+        String version,
 
         LocalDateTime createdAt
 ) {

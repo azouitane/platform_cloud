@@ -2,6 +2,7 @@ package com.virtacore.app.controller;
 
 import com.virtacore.app.dto.request.vm.TemplateRequest;
 import com.virtacore.app.dto.response.TemplateResponse;
+import com.virtacore.app.dto.response.TemplateSummary;
 import com.virtacore.app.service.TemplateService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -31,10 +32,17 @@ public class TemplateController {
         return templateService.findAll();
     }
 
+
+    @GetMapping("summary")
+    public List<TemplateSummary> findAllSummary() {
+        return templateService.findAllSummary();
+    }
     @GetMapping("/{id}")
     public TemplateResponse findById(
             @PathVariable UUID id
     ) {
         return templateService.findById(id);
     }
+
+    
 }

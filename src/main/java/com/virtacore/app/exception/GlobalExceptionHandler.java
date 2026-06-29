@@ -51,6 +51,18 @@ public class GlobalExceptionHandler {
     }
 
     // ==============================
+
+    @ExceptionHandler(RuntimeException.class)
+    public ResponseEntity<ErrorResponse> handleValidation(
+            RuntimeException ex,
+            HttpServletRequest req) {
+
+        return ResponseEntity.badRequest()
+                .body(build(HttpStatus.BAD_REQUEST, ex.getMessage(), req.getRequestURI()));
+    }
+
+
+    // ==============================
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ErrorResponse> handleNoResource(
             NoResourceFoundException ex,

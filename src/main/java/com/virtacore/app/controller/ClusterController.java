@@ -2,11 +2,13 @@ package com.virtacore.app.controller;
 
 import com.virtacore.app.dto.request.vm.ClusterRequest;
 import com.virtacore.app.dto.response.ClusterResponse;
+import com.virtacore.app.dto.response.ClusterSummary;
 import com.virtacore.app.service.ClusterService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,6 +24,7 @@ public class ClusterController {
 
 
 
+    @PreAuthorize("hasAnyRole('ADMIN')")
     @PostMapping
     public ResponseEntity<ClusterResponse> create(@Valid
             @RequestBody ClusterRequest request
@@ -38,6 +41,7 @@ public class ClusterController {
 
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN')")
     public ResponseEntity<List<ClusterResponse>> findAll(){
 
         return ResponseEntity.ok(
@@ -45,8 +49,13 @@ public class ClusterController {
         );
     }
 
+    @GetMapping("summary")
+    public ResponseEntity<List<ClusterSummary>> findAllSummary(){
 
-
+        return ResponseEntity.ok(
+                clusterService.findAllSummary()
+        );
+    }
 
 
     @GetMapping("/{id}")
@@ -62,8 +71,7 @@ public class ClusterController {
 
 
 
-
-
+    @PreAuthorize("hasAnyRole('ADMIN')")
     @PutMapping("/{id}")
     public ResponseEntity<ClusterResponse> update(
             @PathVariable UUID id,
@@ -81,7 +89,7 @@ public class ClusterController {
 
 
 
-
+    @PreAuthorize("hasAnyRole('ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(
             @PathVariable UUID id
