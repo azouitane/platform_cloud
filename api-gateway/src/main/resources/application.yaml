@@ -1,0 +1,51 @@
+
+server:
+  port: 8080
+  shutdown: graceful
+
+spring:
+  application:
+    name: api-gateway
+
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            # Infrastructure Service
+            - id: infrastructure-service
+              uri: lb://infrastructure-service
+              predicates:
+                - Path=/api/infrastructure/**
+              filters:
+                - StripPrefix=1
+
+            # Compute Service
+            - id: compute-service
+              uri: lb://compute-service
+              predicates:
+                - Path=/api/compute/**
+              filters:
+                - StripPrefix=1
+
+eureka:
+  client:
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
+    com.netflix.discovery: INFO

@@ -1,0 +1,50 @@
+server:
+  port: 8081
+  shutdown: graceful
+
+spring:
+  application:
+    name: infrastructure-service
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://10.0.23.208:5432/infrastructure_db}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:azerty123}
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+
+  cloud:
+    compatibility-verifier:
+      enabled: true
+
+eureka:
+  client:
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  level:
+    com.platformcloud.infrastructure: INFO
+
+
+vault:
+  url: ${VAULT_ADDR}
+  token: ${VAULT_TOKEN}
