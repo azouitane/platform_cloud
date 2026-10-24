@@ -345,6 +345,88 @@ pvesh get /cluster/nextid
 
 Pour Spring Boot, utiliser un **API token à privilèges minimaux**, conserver les secrets dans un gestionnaire de secrets, vérifier les certificats TLS et suivre les tâches Proxmox de manière asynchrone. Ne pas exposer le token au frontend.
 
+### 10.1. Créer un API Token pour `infrastructure-service`
+
+Sur `pve01` (root), créer un compte de service et un rôle dédié. Les commandes `pveum` sont synchronisées au niveau du cluster : ne pas recréer les mêmes objets sur `pve02`.
+
+```bash
+pveum user add cloud-api@pve --comment "Cloud Infrastructure API Service"
+pveum role add CloudInfrastructure --privs "VM.Audit VM.Allocate VM.Clone VM.Config.CPU VM.Config.Memory VM.Config.Disk VM.Config.Network VM.Config.Options VM.PowerMgmt VM.Migrate Datastore.Audit Datastore.AllocateSpace Sys.Audit"
+```
+
+Pour ce lab, affecter le rôle au compte sur `/` (portée **cluster entier**). En production, réduire le périmètre et adapter les privilèges aux opérations effectivement utilisées ; certaines opérations de stockage, LXC ou de gestion de pools peuvent nécessiter d'autres privilèges.
+
+```bash
+pveum aclmod / --users cloud-api@pve --roles CloudInfrastructure
+pveum user token add cloud-api@pve infrastructure --privsep 1 --comment "Spring Boot Infrastructure Service"
+```
+
+**Enregistrer immédiatement et en lieu sûr la valeur `value` retournée** : le secret du token ne sera pas réaffiché. L'identifiant est `cloud-api@pve!infrastructure`. Avec `--privsep 1`, accorder aussi les ACL au token ; ses permissions effectives restent limitées par celles de l'utilisateur propriétaire.
+
+```bash
+pveum aclmod / --tokens 'cloud-api@pve!infrastructure' --roles CloudInfrastructure
+pveum user token list cloud-api@pve
+pveum user permissions cloud-api@pve
+pveum user token permissions cloud-api@pve infrastructure
+```
+
+### 10.2. Tester depuis Fedora avec Zsh
+
+En **Zsh**, la syntaxe Bash `read -rsp` ne fonctionne pas (`read: -p: no coprocess`). Utiliser :
+
+```zsh
+export PROXMOX_API_URL='https://192.168.122.201:8006'
+export PROXMOX_TOKEN_ID='cloud-api@pve!infrastructure'
+read -rs 'PROXMOX_TOKEN_SECRET?Proxmox API token secret: '
+echo
+export PROXMOX_TOKEN_SECRET
+[[ -n "$PROXMOX_TOKEN_SECRET" ]] && echo 'Secret chargé'
+```
+
+Test rapide **uniquement en lab**, sans validation du certificat TLS :
+
+```bash
+curl -k --fail-with-body \
+  -H "Authorization: PVEAPIToken=${PROXMOX_TOKEN_ID}=${PROXMOX_TOKEN_SECRET}" \
+  "${PROXMOX_API_URL}/api2/json/nodes"
+```
+
+Une réponse HTTP 200 contient `data` avec les nœuds accessibles (`pve01`, `pve02` selon les permissions). HTTP 401 : identifiants incorrects ; HTTP 403 : permissions insuffisantes.
+
+### 10.3. Tester avec validation TLS (recommandé)
+
+`/path/to/proxmox-ca.pem` n'est **qu'un exemple**, pas un chemin réel. Copier l'autorité de certification Proxmox depuis `pve01` :
+
+```bash
+scp root@192.168.122.201:/etc/pve/pve-root-ca.pem ~/proxmox-ca.pem
+```
+
+Si le certificat serveur est signé par cette CA et comporte `pve01.local` dans ses SAN, utiliser ce nom DNS, même si le poste Fedora ne le résout pas encore :
+
+```bash
+curl --fail-with-body \
+  --cacert "$HOME/proxmox-ca.pem" \
+  --resolve pve01.local:8006:192.168.122.201 \
+  -H "Authorization: PVEAPIToken=${PROXMOX_TOKEN_ID}=${PROXMOX_TOKEN_SECRET}" \
+  'https://pve01.local:8006/api2/json/nodes'
+```
+
+**Note :** vérifier le certificat réellement servi (`openssl s_client -connect 192.168.122.201:8006 -servername pve01.local`) : le certificat doit correspondre au nom utilisé et à la CA copiée. Si le serveur utilise un certificat émis par une autre CA, installer cette CA à la place. Ne pas utiliser `-k` dans l'application.
+
+### 10.4. Configuration Spring Boot et sécurité
+
+Dans `infrastructure-service/src/main/resources/application.yml` :
+
+```yaml
+proxmox:
+  api:
+    url: ${PROXMOX_API_URL}
+    token-id: ${PROXMOX_TOKEN_ID}
+    token-secret: ${PROXMOX_TOKEN_SECRET}
+```
+
+L'en-tête HTTP à envoyer est `Authorization: PVEAPIToken=<token-id>=<token-secret>`. Pour la production, placer le secret dans **OpenBao**, le récupérer côté backend et ne jamais le committer dans Git, l'exposer au frontend ni le journaliser. Protéger aussi les variables d'environnement et la clé privée SSH utilisée pour les opérations d'administration.
+
 ## 11. Quorum, disponibilité et limites
 
 Un cluster à deux nœuds peut être **quorate** tant que les deux membres sont disponibles, mais il risque de perdre le quorum si un seul nœud tombe. Pour un lab HA, ajouter un **QDevice indépendant** (troisième vote) et étudier le stockage partagé, les backups et la capacité de reprise. Un QDevice hébergé sur le même Fedora ne protège pas contre une panne de cet hôte physique. Le cluster n'est **pas automatiquement** une infrastructure HA de production.
