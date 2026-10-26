@@ -1,5 +1,6 @@
 package com.platformcloud.infrastructure.infrastructure.persistence.impl;
 
+import com.platformcloud.infrastructure.domain.exception.ResourceNotFoundException;
 import com.platformcloud.infrastructure.domain.exception.ValidationException;
 import com.platformcloud.infrastructure.domain.model.Cluster;
 import com.platformcloud.infrastructure.domain.repository.ClusterRepository;
@@ -36,7 +37,7 @@ public class ClusterRepositoryImpl implements ClusterRepository {
         } else {
             entity = jpaRepository.findById(cluster.id())
                     .orElseThrow(() ->
-                            new ValidationException(
+                            new ResourceNotFoundException(
                                     "Cluster not found: " + cluster.id()
                             )
                     );

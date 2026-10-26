@@ -61,15 +61,15 @@ public class ClusterController {
         service.delete(id);
     }
 
-    record status(
-            String message
+    record Status(
+            boolean status
     ) {}
 
     @PostMapping("/{id}/connection")
-    public status verifyConnection(@PathVariable UUID id) {
+    public Status verifyConnection(@PathVariable UUID id) {
         boolean status = service.verifyConnection(id);
 
-        return new status("is Running : " + status);
+        return new Status(status);
     }
 }
 
