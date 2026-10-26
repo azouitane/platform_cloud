@@ -12,14 +12,4 @@ public record Node(
         String name,
         NodeStatus status,
         Instant createdAt
-) {
-    public Node {
-        if (clusterId == null) {
-            throw new IllegalArgumentException("Cluster ID is required");
-        }
-
-        if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException("Node name is required");
-        }
-    }
-}
+) { }

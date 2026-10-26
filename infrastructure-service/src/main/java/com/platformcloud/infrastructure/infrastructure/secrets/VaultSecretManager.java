@@ -1,66 +1,78 @@
+
 package com.platformcloud.infrastructure.infrastructure.secrets;
 
 import com.platformcloud.infrastructure.application.port.SecretManager;
 import com.platformcloud.infrastructure.domain.model.ProxmoxCredentials;
+
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
+import org.springframework.vault.core.VaultKeyValueOperations;
+import org.springframework.vault.core.VaultKeyValueOperationsSupport;
+import org.springframework.vault.core.VaultOperations;
+import org.springframework.vault.support.VaultResponseSupport;
 
 import java.util.Map;
 
+@Slf4j
 @Component
 public class VaultSecretManager implements SecretManager {
 
-    private final RestClient client;
+    private final VaultKeyValueOperations kv;
 
     public VaultSecretManager(
-            RestClient.Builder builder,
-            @Value("${vault.url}") String vaultUrl,
-            @Value("${vault.token}") String vaultToken
+            VaultOperations vaultOperations,
+            @Value("${platformcloud.secrets.proxmox-mount:secret}")
+            String mount
     ) {
-        this.client = builder
-                .baseUrl(vaultUrl)
-                .defaultHeader("X-Vault-Token", vaultToken)
-                .build();
+        this.kv = vaultOperations.opsForKeyValue(
+                mount,
+                VaultKeyValueOperationsSupport.KeyValueBackend.KV_2
+        );
     }
 
     @Override
-    @SuppressWarnings("unchecked")
-    public ProxmoxCredentials getCredentials(String secretRef) {
-
+    public ProxmoxCredentials getProxmoxCredentials(
+            String secretRef
+    ) {
         if (secretRef == null ||
-                !secretRef.matches("proxmox/clusters/[a-zA-Z0-9_-]+")) {
+                !secretRef.matches("proxmox/[a-zA-Z0-9_-]+")) {
+
             throw new IllegalArgumentException(
-                    "Invalid secret reference"
+                    "Invalid Proxmox secret reference"
             );
         }
 
-        Map<String, Object> response = client.get()
-                .uri("/v1/secret/data/{path}", secretRef)
-                .retrieve()
-                .body(Map.class);
+        VaultResponseSupport<Map> response =
+                kv.get(secretRef, Map.class);
 
-        if (response == null) {
-            throw new IllegalStateException("Vault returned no data");
+        if (response == null || response.getData() == null) {
+            throw new IllegalStateException(
+                    "Proxmox credentials not found"
+            );
         }
 
-        Map<String, Object> outer =
-                (Map<String, Object>) response.get("data");
-
-        if (outer == null) {
-            throw new IllegalStateException("Vault data missing");
-        }
-
-        Map<String, Object> data =
-                (Map<String, Object>) outer.get("data");
-
-        if (data == null) {
-            throw new IllegalStateException("Vault secret missing");
-        }
+        Map<?, ?> data = response.getData();
 
         return new ProxmoxCredentials(
-                (String) data.get("token_id"),
-                (String) data.get("token_secret")
+                requiredString(data, "token_id"),
+                requiredString(data, "token_secret")
         );
+    }
+
+    private String requiredString(
+            Map<?, ?> data,
+            String key
+    ) {
+        Object value = data.get(key);
+
+        if (!(value instanceof String text) || text.isBlank()) {
+            throw new IllegalStateException(
+                    "Missing Proxmox credential field: " + key
+            );
+        }
+
+        return text;
     }
 }

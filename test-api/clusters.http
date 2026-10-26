@@ -1,0 +1,39 @@
+@baseUrl = http://localhost:8081
+@clusterId = fac9accb-e7df-4290-b930-01bae695226a
+
+### Create Cluster
+POST {{baseUrl}}/api/clusters
+Content-Type: application/json
+
+{
+  "name": "cloud-cluster",
+  "host": "pve01.local",
+  "port": 8006,
+  "secretRef": "proxmox/cluster-01"
+}
+
+### Get All Clusters
+GET {{baseUrl}}/api/clusters
+Accept: application/json
+
+### Get Cluster By ID
+GET {{baseUrl}}/api/clusters/{{clusterId}}
+Accept: application/json
+
+### Update Cluster
+PUT {{baseUrl}}/api/clusters/{{clusterId}}
+Content-Type: application/json
+
+{
+  "name": "cloud-cluster",
+  "host": "pve01.local",
+  "secretRef": "proxmox/cluster-01",
+  "enabled": true
+}
+
+### Test Proxmox Connection
+POST {{baseUrl}}/api/clusters/{{clusterId}}/connection
+Accept: application/json
+
+### Delete Cluster
+DELETE {{baseUrl}}/api/clusters/{{clusterId}}

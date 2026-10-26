@@ -1,0 +1,14 @@
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.p12
+*.pfx
+*.key
+application-local.yml
+application-prod.yml
+
+# Build
+target/
+.idea/

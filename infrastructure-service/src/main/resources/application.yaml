@@ -1,34 +1,53 @@
 server:
-  port: 8081
+  port: ${SERVER_PORT:8081}
   shutdown: graceful
 
 spring:
   application:
     name: infrastructure-service
 
-  datasource:
-    url: ${DB_URL:jdbc:postgresql://10.0.23.208:5432/infrastructure_db}
-    username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:azerty123}
 
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+## validate
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     properties:
       hibernate:
         format_sql: true
 
+
   cloud:
     compatibility-verifier:
       enabled: true
+
+    vault:
+      enabled: true
+      uri: ${BAO_ADDR}
+      authentication: APPROLE
+
+      app-role:
+        role-id: ${BAO_ROLE_ID}
+        secret-id: ${BAO_SECRET_ID}
+        app-role-path: approle
+
+      kv:
+        enabled: false
 
 eureka:
   client:
     register-with-eureka: true
     fetch-registry: true
     service-url:
-      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+      defaultZone: ${EUREKA_URL}
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 30
+    lease-expiration-duration-in-seconds: 90
 
 management:
   endpoints:
@@ -43,8 +62,3 @@ management:
 logging:
   level:
     com.platformcloud.infrastructure: INFO
-
-
-vault:
-  url: ${VAULT_ADDR}
-  token: ${VAULT_TOKEN}
